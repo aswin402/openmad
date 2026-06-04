@@ -22,31 +22,9 @@ OpenMAD (**Open M**ulti-**A**gent **D**eveloper) is a high-performance, active m
 
 ## 📊 Workflow Graph
 
-```mermaid
-graph TD
-    Goal["User Goal: 'Design a web UI with Rust backend'"] --> John["John (Product Manager)"]
-    John --> DAG["Decomposed Task DAG"]
-    DAG --> Orchestrator["Tokio Event Core"]
-    
-    Orchestrator --> Spawner["Spawner (Recruits Agents)"]
-    Spawner --> Team["Spawned Team: PM, Coder, Vision Auditor, QA"]
-    
-    subgraph Execution Pipeline
-        T1["T1: Design Specifications (John)"] --> T2["T2: Implement Code (Amelia)"]
-        T2 --> T3["T3: Visual Layout Audit (Vivian)"]
-        T3 --> T4["T4: Run Verification Tests (TestBot)"]
-    end
-    
-    T2 -- "Saves Code Output" --> TS["Tree-Sitter AST Parse Check"]
-    TS -- "Generates Report" --> T3
-    
-    T3 -- "Multimodal API" --> Gemini["Gemini 2.5 Flash (Inspected Layout UI)"]
-    Gemini -- "Feedback: Spacing issue on sidebar" --> Repair["Self-Repair Run: Feedback to Amelia"]
-    Repair --> T2
-    
-    T4 -- "Approved" --> Shared["Save to Shared DashMap Workspace"]
-    Shared --> Final["Deliver Final Artifacts"]
-```
+<p align="center">
+  <img src="openmad_workflow.png" alt="OpenMAD Workflow Diagram" width="800" />
+</p>
 
 ---
 
