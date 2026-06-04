@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     println!("====================================================");
-    println!("     OpenZ - Advanced Multi-Agent Orchestrator     ");
+    println!("     OpenMAD - Advanced Multi-Agent Orchestrator   ");
     println!("====================================================\n");
 
     // 3. Initialize and run the Orchestrator
@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     orchestrator.run_goal(&goal).await?;
 
     println!("\n====================================================");
-    println!("   OpenZ Execution Finished Successfully            ");
+    println!("   OpenMAD Execution Finished Successfully          ");
     println!("====================================================");
 
     Ok(())
