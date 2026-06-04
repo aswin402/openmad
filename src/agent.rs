@@ -16,7 +16,9 @@ pub struct AgentInstance {
     pub id: String,
     pub persona: AgentPersona,
     pub task_type: TaskType,
+    pub core_memory: crate::memory::CoreMemory,
 }
+
 
 pub struct AgentRegistry {
     personas: HashMap<String, AgentPersona>,

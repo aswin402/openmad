@@ -3,6 +3,8 @@ use fastembed::{TextEmbedding, InitOptions};
 use std::sync::{Arc, RwLock};
 use tracing::{info, error};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
+
 
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
@@ -160,3 +162,87 @@ impl SharedAgentMemory {
         self.artifacts.iter().map(|kv| kv.key().clone()).collect()
     }
 }
+
+// === LETTA-STYLE CORE MEMORY IMPLEMENTATION ===
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoreMemory {
+    pub blocks: std::collections::HashMap<String, String>,
+}
+
+impl CoreMemory {
+    pub fn new(persona_desc: &str, human_desc: &str) -> Self {
+        let mut blocks = std::collections::HashMap::new();
+        blocks.insert("persona".to_string(), persona_desc.to_string());
+        blocks.insert("human".to_string(), human_desc.to_string());
+        Self { blocks }
+    }
+
+    pub fn get_block(&self, label: &str) -> Option<&String> {
+        self.blocks.get(label)
+    }
+
+    pub fn set_block(&mut self, label: &str, value: &str) {
+        self.blocks.insert(label.to_string(), value.to_string());
+    }
+
+    pub fn to_xml(&self) -> String {
+        let mut xml = String::new();
+        xml.push_str("<core_memory>\n");
+        for (label, val) in &self.blocks {
+            xml.push_str(&format!("  <{}>\n    {}\n  </{}>\n", label, val, label));
+        }
+        xml.push_str("</core_memory>");
+        xml
+    }
+}
+
+pub struct AgentMemoryStore {
+    file_path: String,
+}
+
+impl AgentMemoryStore {
+    pub fn new(path: &str) -> Self {
+        Self {
+            file_path: path.to_string(),
+        }
+    }
+
+    /// Loads the core memory for a given agent name.
+    pub fn load_memory(&self, agent_name: &str, default_persona: &str) -> CoreMemory {
+        if std::path::Path::new(&self.file_path).exists() {
+            if let Ok(content) = std::fs::read_to_string(&self.file_path) {
+                if let Ok(mut store) = serde_json::from_str::<std::collections::HashMap<String, CoreMemory>>(&content) {
+                    if let Some(mem) = store.remove(agent_name) {
+                        info!("Loaded persistent Letta-style memory for agent '{}'", agent_name);
+                        return mem;
+                    }
+                }
+            }
+        }
+        
+        info!("No persistent memory found for agent '{}'. Initializing with default.", agent_name);
+        CoreMemory::new(default_persona, "The user wants to complete the orchestrator goals. Prefers clean code and clear logs.")
+    }
+
+    /// Saves the core memory for a given agent name.
+    pub fn save_memory(&self, agent_name: &str, memory: &CoreMemory) -> anyhow::Result<()> {
+        let mut store = if std::path::Path::new(&self.file_path).exists() {
+            if let Ok(content) = std::fs::read_to_string(&self.file_path) {
+                serde_json::from_str::<std::collections::HashMap<String, CoreMemory>>(&content)
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashMap::new()
+            }
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        store.insert(agent_name.to_string(), memory.clone());
+        let serialized = serde_json::to_string_pretty(&store)?;
+        std::fs::write(&self.file_path, serialized)?;
+        info!("Saved persistent Letta-style memory for agent '{}'", agent_name);
+        Ok(())
+    }
+}
+

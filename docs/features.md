@@ -22,12 +22,15 @@ OpenMAD contains a resilient LLM routing system that prevents execution locks:
 
 ---
 
-## 🧠 Local Vector Memory (FastEmbed)
+## 🧠 Letta-Style Stateful Memory (LLM-as-OS)
 
-Agents use local memory to maintain consistency across tasks without bloating context windows:
-- **FastEmbed Integration**: Generates vector embeddings locally using small, high-quality models (such as `AllMiniLML6V2`).
-- **Cosine Similarity Querying**: Computes mathematical cosine angles between query embeddings and stored memories to retrieve the most semantically related historical context.
-- **Shared DashMap Workspace**: Serves as a thread-safe, rapid key-value catalog where agents publish intermediate design outputs and retrieve code snippets.
+OpenMAD implements a stateful hierarchical memory system inspired by Letta (formerly MemGPT). This system splits memory into distinct operational tiers:
+
+- **Core Memory (RAM)**: Prominently visible in the agent prompt as XML blocks (`<core_memory>`). It houses blocks like `persona` (agent self-instructions) and `human` (user profiles).
+- **Agentic Memory Autonomy**: The prompt contains instructions for the model to update its own core memory. The orchestrator parses the output for `<update_core_memory block="...">` tags, updates the live agent state, and saves it.
+- **Persistent JSON Storage**: The core memory is serialized and stored in `letta_memory_store.json`. Agents automatically load their persistent state in subsequent execution runs, meaning they remember user preferences and past execution specifications long-term.
+- **Recall & Archival Memory (Local Vector)**: Generates vector embeddings locally using `fastembed` and queries historical files and logs using cosine similarity checks to retrieve semantic contexts.
+- **Shared Workspace**: Thread-safe concurrent sharing of intermediate task results using `dashmap::DashMap`.
 
 ---
 

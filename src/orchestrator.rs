@@ -148,7 +148,7 @@ impl Orchestrator {
                     };
 
                     // Retrieve specialized agent instance
-                    let agent = spawner_ref.spawn_agent_for_task(task.task_type);
+                    let mut agent = spawner_ref.spawn_agent_for_task(task.task_type);
                     info!("Executing task '{}' via Agent '{}' ({})", task.id, agent.persona.name, agent.persona.title);
 
                     // Search semantic memory for context
@@ -175,7 +175,11 @@ impl Orchestrator {
                         "".to_string(), // starting empty to trigger model run inside loop
                         |prev_output, feedback| {
                             let router = router_clone.clone();
-                            let system_prompt = agent.persona.system_prompt.clone();
+                            let system_prompt = format!(
+                                "{}\n\n=== LETTA-STYLE HIERARCHICAL CORE MEMORY ===\n{}\n\n=== MEMORY UPDATE PROTOCOL ===\nYou can autonomously update your core memory blocks. If you learn anything new about the user or your goals, or wish to refine your persona instructions, output your changes using this exact tag format:\n<update_core_memory block=\"human\">new info about the user</update_core_memory>\n<update_core_memory block=\"persona\">new self-instructions or skill notes</update_core_memory>\nDO NOT output placeholders. Write the full updated value.",
+                                agent.persona.system_prompt,
+                                agent.core_memory.to_xml()
+                            );
                             let user_prompt_run = if prev_output.is_empty() {
                                 user_prompt.clone()
                             } else {
@@ -200,6 +204,9 @@ impl Orchestrator {
                         Ok(res) => {
                             info!("Successfully completed task: '{}'", task.id);
                             
+                            // Parse and apply autonomous Letta-style memory updates
+                            parse_and_apply_memory_updates(&res, &agent.persona.name, &mut agent.core_memory, &spawner_ref.memory_store);
+
                             if task.task_type == TaskType::Coding {
                                 let mut tr = ToolRouter::new();
                                 if let Ok(ast_report) = tr.execute_tool("ast_parse", &res) {
@@ -244,5 +251,47 @@ impl Orchestrator {
         }
 
         Ok(())
+    }
+}
+
+fn parse_and_apply_memory_updates(
+    output: &str,
+    agent_name: &str,
+    core_memory: &mut crate::memory::CoreMemory,
+    memory_store: &crate::memory::AgentMemoryStore,
+) {
+    let start_tag_prefix = "<update_core_memory block=\"";
+    let end_tag = "</update_core_memory>";
+
+    let mut current_pos = 0;
+    while let Some(start_idx) = output[current_pos..].find(start_tag_prefix) {
+        let absolute_start = current_pos + start_idx;
+        let block_name_start = absolute_start + start_tag_prefix.len();
+        
+        if let Some(quote_idx) = output[block_name_start..].find('"') {
+            let block_name_end = block_name_start + quote_idx;
+            let block_name = &output[block_name_start..block_name_end];
+            
+            let val_start = block_name_end + 2; // skip `">`
+            if val_start < output.len() {
+                if let Some(end_idx) = output[val_start..].find(end_tag) {
+                    let absolute_end = val_start + end_idx;
+                    let val = &output[val_start..absolute_end];
+                    
+                    // Update core memory block
+                    core_memory.set_block(block_name, val.trim());
+                    info!("[Letta Memory System] Agent '{}' autonomously updated core memory block '{}' to: '{}'", agent_name, block_name, val.trim());
+                    
+                    // Save memory
+                    if let Err(e) = memory_store.save_memory(agent_name, core_memory) {
+                        error!("Failed to save persistent memory for agent '{}': {}", agent_name, e);
+                    }
+                    
+                    current_pos = absolute_end + end_tag.len();
+                    continue;
+                }
+            }
+        }
+        current_pos += start_tag_prefix.len();
     }
 }

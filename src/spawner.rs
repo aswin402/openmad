@@ -16,6 +16,7 @@ pub struct AgentSpawner {
     registry: AgentRegistry,
     message_hub_tx: flume::Sender<AgentMessage>,
     message_hub_rx: flume::Receiver<AgentMessage>,
+    pub memory_store: crate::memory::AgentMemoryStore,
 }
 
 impl AgentSpawner {
@@ -25,6 +26,7 @@ impl AgentSpawner {
             registry: AgentRegistry::new(),
             message_hub_tx: tx,
             message_hub_rx: rx,
+            memory_store: crate::memory::AgentMemoryStore::new("letta_memory_store.json"),
         }
     }
 
@@ -127,10 +129,12 @@ impl AgentSpawner {
     }
 
     fn create_instance(&self, id: &str, persona: &AgentPersona, task_type: TaskType) -> AgentInstance {
+        let core_memory = self.memory_store.load_memory(&persona.name, &persona.system_prompt);
         AgentInstance {
             id: id.to_string(),
             persona: persona.clone(),
             task_type,
+            core_memory,
         }
     }
 }

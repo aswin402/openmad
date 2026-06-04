@@ -2,3 +2,4 @@
 /.fastembed_cache/
 **/*.bak
 *.log
+/letta_memory_store.json

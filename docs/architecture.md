@@ -44,10 +44,12 @@ Handles connections to OpenAI, Anthropic, and Google Gemini API endpoints.
 - Tracks success/failure metrics in a thread-safe map, dynamically routing subsequent queries to the most successful provider.
 
 ### 5. Memory Engine (`memory.rs`)
-Manages short-term context caches and long-term semantic records.
-- Embeds inputs using `fastembed`'s text embedding models.
-- Implements a pure-Rust semantic similarity scorer using **Cosine Similarity** to match current agent tasks against historical code or specifications.
-- Hosts `SharedAgentMemory` powered by a thread-safe `DashMap` for inter-agent artifact sharing.
+Manages hierarchical context, agent core memories, and long-term semantic records.
+- **Core Memory (RAM)**: Exposes `CoreMemory` representing agent-managed blocks (`persona` and `human` sections) that are dynamically formatted as XML and injected into LLM system prompts.
+- **Persistent JSON Store**: Exposes `AgentMemoryStore` which writes modified core memories into `letta_memory_store.json` and loads them back on subsequent orchestrator launches.
+- **Recall & Archival Memory (Cold Storage)**: Embeds inputs using `fastembed`'s text embedding models and implements a pure-Rust similarity scorer using **Cosine Similarity** to search historical task logs.
+- **Shared Workspace**: Hosts `SharedAgentMemory` powered by a thread-safe `DashMap` for inter-agent artifact sharing.
+
 
 ### 6. Tool Router (`tool_router.rs`)
 Coordinates system-level tools:

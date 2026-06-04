@@ -14,7 +14,7 @@ OpenMAD (**Open M**ulti-**A**gent **D**eveloper) is a high-performance, active m
 *   **Parallel Task Execution (DAG)**: Decomposes objectives into a Directed Acyclic Graph of tasks and runs non-dependent tasks concurrently using Tokio task joins.
 *   **Multimodal Vision Integration**: Integrates a Vision Auditor Agent (Vivian) to view images, analyze grid spacing, verify layouts, and audit visual diagrams using multimodal LLMs (e.g. Gemini 2.5 Flash).
 *   **Multi-Model Router & Fallbacks**: Routes task types to specialized LLMs (Qwen/DeepSeek for coding, Claude/Gemini for research) and handles fail-safe execution using fallback chains (Primary $\rightarrow$ Secondary $\rightarrow$ Fallback).
-*   **Local Vector Memory**: Uses the `fastembed` crate to generate local vector embeddings, powering semantic context injection for active agents using Cosine Similarity checks.
+*   **Stateful Letta-Style Memory**: Implements a hierarchical, agent-managed memory system (Core XML RAM, Recall message logs, and Archival vector storage using the `fastembed` crate). Agents autonomously inspect and rewrite their own memory blocks during task execution, persisting updates locally to JSON storage.
 *   **Tree-Sitter AST Parsing**: Evaluates developer agent outputs using a local tree-sitter compiler-level parser to count nodes and syntax types before submitting outputs for audit.
 *   **Reflection & Self-Repair**: Reviewer agent (Winston) inspects outputs against acceptance criteria, initiating a loop-back correction run for failed items to fix bugs automatically.
 
@@ -51,7 +51,7 @@ OpenMAD is written in pure Rust, ensuring exceptionally lightweight footprints c
 | **Agent Roster** | Hardcoded configs (`mary`, `john`, `amelia`) | Dynamic agent spawner based on goal complexity |
 | **LLM Router** | Static model selection per IDE | Dynamic model routing based on past success rates |
 | **Errors / Failures** | Execution halt / user intervention | Multi-model fallback chains (Gemini $\rightarrow$ Claude $\rightarrow$ OpenAI) |
-| **Memory** | Global context markdown files | Local Vector memory via `fastembed` with Cosine Similarity |
+| **Memory** | Global context markdown files | Stateful, hierarchical Letta-style memory (Core, Recall, Archival) with local fastembed vector storage |
 | **Code Verification** | Manual compilation check / linters | Tree-sitter AST validation before reviewer audit |
 | **Design Audits** | Manual visual inspection | Vision Auditor (Vivian) using multimodal vision LLMs |
 

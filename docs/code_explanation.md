@@ -47,11 +47,14 @@ Coordinates LLM clients, fallbacks, and success rates.
 - **`call_gemini`/`call_anthropic`/`call_openai`**: Implements HTTPS REST client wrappers using `reqwest` and `serde_json` to call upstream providers.
 
 ### 7. `memory.rs`
-Provides semantic search context.
+Provides semantic search context, hierarchical memory structures, and persistence.
 - **`MemoryEngine`**: Wraps the `fastembed` model loader. If fastembed fails or is offline, it degrades gracefully.
 - **`store_memory`**: Embeds text snippets and saves them into the vector database list.
 - **`query_semantic`**: Scans stored vector embeddings using **Cosine Similarity** to return the top matching semantic contexts for a query.
 - **`SharedAgentMemory`**: Uses `dashmap::DashMap` to provide concurrent, lock-free artifact storage across worker threads.
+- **`CoreMemory`**: Represents the structured blocks (e.g. `persona`, `human`) that act as agent RAM and are serialized to XML.
+- **`AgentMemoryStore`**: Serializes core memory states to `letta_memory_store.json` and loads them back on demand.
+
 
 ### 8. `tool_router.rs`
 Implements tools for agents.

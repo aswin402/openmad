@@ -389,7 +389,7 @@ impl ModelRouter {
   }
 ]"#.to_string()
         } else if p_lower.contains("research") {
-            "RESEARCH REPORT: Found 3 relevant library integrations. Recommend using hyper/rustls for networking, petgraph for dependency graph sorting, and tree-sitter-rust for source code traversal. Embedding searches show these are optimal for Rust-based orchestration.".to_string()
+            "RESEARCH REPORT: Found 3 relevant library integrations. Recommend using hyper/rustls for networking, petgraph for dependency graph sorting, and tree-sitter-rust for source code traversal. Embedding searches show these are optimal for Rust-based orchestration.\n\n<update_core_memory block=\"human\">Alex wants to build high-performance agent tools in Rust, preferring Tokio for async operations and fastembed for embeddings.</update_core_memory>\n<update_core_memory block=\"persona\">I am Mary, a Business Analyst. I now remember that Alex is building high-performance systems and likes Tokio.</update_core_memory>".to_string()
         } else if p_lower.contains("code") || p_lower.contains("implement") {
             "// IMPLEMENTATION OUTLINE\npub struct WeatherEngine {\n    pub api_key: String,\n}\n\nimpl WeatherEngine {\n    pub fn fetch_weather(&self) -> Result<String, &'static str> {\n        Ok(\"{\"temp\": 22, \"condition\": \"Sunny\"}\".to_string())\n    }\n}".to_string()
         } else if p_lower.contains("review") {
@@ -397,7 +397,7 @@ impl ModelRouter {
         } else if p_lower.contains("test") {
             "TESTING RESULTS:\n- weather_fetch_test ... ok\n- connection_fallback_test ... ok\n- parsing_structure_test ... ok\nAll 3 tests passed successfully. Coverage: 92%".to_string()
         } else if p_lower.contains("vision") || p_lower.contains("diagram") || p_lower.contains("layout") || p_lower.contains("ui") {
-            "VISION AUDIT REPORT:\n- UI Layout check: Approved. Elements are correctly aligned.\n- Color contrast check: Compliant (WCAG AAA).\n- Grid/Spacing check: 8px grid alignment verified.\n- Diagram verification: Flow sequences match spec design.".to_string()
+            "VISION AUDIT REPORT:\n- UI Layout check: Approved. Elements are correctly aligned.\n- Color contrast check: Compliant (WCAG AAA).\n- Spacing: Spacing is aligned.\n\n<update_core_memory block=\"human\">The human user wants to build a CLI in Rust, preferring Tokio. Space is audited.</update_core_memory>\n<update_core_memory block=\"persona\">I have audited the layout and confirmed alignment. I am a helpful design and system assistant.</update_core_memory>".to_string()
         } else {
             format!("MOCK RESPONSE (Model: {}): Processed prompt successfully. Results generated in local workspace context.", config.name)
         }
