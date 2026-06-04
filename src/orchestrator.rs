@@ -146,127 +146,131 @@ impl Orchestrator {
 
             info!("Spawning parallel execution for ready tasks: {:?}", ready_tasks);
 
-            let mut task_futures = Vec::new();
-            for task_id in ready_tasks {
-                // Mark task as Running
-                {
-                    let mut dag_guard = dag_mutex.lock().unwrap();
-                    dag_guard.update_status(&task_id, TaskStatus::Running, None);
-                }
-
-                // Copy required context
-                let dag_clone = dag_mutex.clone();
-                let spawner_ref = &self.spawner;
-                let router_clone = self.model_router.clone();
-                let memory_clone = self.memory_engine.clone();
-                let shared_clone = self.shared_memory.clone();
-                let reflection_clone = self.reflection_system.clone();
-                let image_path_opt = detected_image.clone();
-
-                let task_future = async move {
-                    let task = {
-                        let dag_guard = dag_clone.lock().unwrap();
-                        dag_guard.tasks.get(&task_id).cloned().unwrap()
-                    };
-
-                    // Retrieve specialized agent instance
-                    let mut agent = spawner_ref.spawn_agent_for_task(task.task_type);
-                    info!("Executing task '{}' via Agent '{}' ({})", task.id, agent.persona.name, agent.persona.title);
-
-                    // Search semantic memory for context
-                    let memory_context = memory_clone.query_semantic(&task.description, 3);
-                    let mut semantic_notes = String::new();
-                    if !memory_context.is_empty() {
-                        semantic_notes.push_str("\n--- Relevant Memory Context ---\n");
-                        for (text, score) in memory_context {
-                            semantic_notes.push_str(&format!("* {} (Similarity: {:.2})\n", text, score));
-                        }
+            // Limit parallel execution to at most 2 subagents/tasks at a time using chunking
+            for chunk in ready_tasks.chunks(2) {
+                let mut task_futures = Vec::new();
+                for task_id in chunk {
+                    let task_id = task_id.clone();
+                    // Mark task as Running
+                    {
+                        let mut dag_guard = dag_mutex.lock().unwrap();
+                        dag_guard.update_status(&task_id, TaskStatus::Running, None);
                     }
 
-                    // Build user prompt
-                    let user_prompt = format!(
-                        "Goal: {}\nTask Title: {}\nDescription: {}\n{}\nInputs from Shared Memory:\n{:?}",
-                        goal, task.title, task.description, semantic_notes, shared_clone.list_keys()
-                    );
+                    // Copy required context
+                    let dag_clone = dag_mutex.clone();
+                    let spawner_ref = &self.spawner;
+                    let router_clone = self.model_router.clone();
+                    let memory_clone = self.memory_engine.clone();
+                    let shared_clone = self.shared_memory.clone();
+                    let reflection_clone = self.reflection_system.clone();
+                    let image_path_opt = detected_image.clone();
 
-                    // Execute task with self-repair reflection loop
-                    let final_result = reflection_clone.run_self_repair_loop(
-                        &router_clone,
-                        &task.title,
-                        &task.description,
-                        "".to_string(), // starting empty to trigger model run inside loop
-                        |prev_output, feedback| {
-                            let router = router_clone.clone();
-                            let system_prompt = format!(
-                                "{}\n\n=== LETTA-STYLE HIERARCHICAL CORE MEMORY ===\n{}\n\n=== MEMORY UPDATE PROTOCOL ===\nYou can autonomously update your core memory blocks. If you learn anything new about the user or your goals, or wish to refine your persona instructions, output your changes using this exact tag format:\n<update_core_memory block=\"human\">new info about the user</update_core_memory>\n<update_core_memory block=\"persona\">new self-instructions or skill notes</update_core_memory>\nDO NOT output placeholders. Write the full updated value.",
-                                agent.persona.system_prompt,
-                                agent.core_memory.to_xml()
-                            );
-                            let user_prompt_run = if prev_output.is_empty() {
-                                user_prompt.clone()
-                            } else {
-                                format!(
-                                    "{}\n\nPrevious attempt failed review.\nFeedback: {}\nPlease correct the output according to the feedback.",
-                                    user_prompt, feedback
-                                )
-                            };
+                    let task_future = async move {
+                        let task = {
+                            let dag_guard = dag_clone.lock().unwrap();
+                            dag_guard.tasks.get(&task_id).cloned().unwrap()
+                        };
 
-                            let image_path_opt = image_path_opt.clone();
-                            async move {
-                                let (out, _) = if task.task_type == TaskType::Vision {
-                                    router.execute_prompt_with_image(
-                                        task.task_type,
-                                        &system_prompt,
-                                        &user_prompt_run,
-                                        image_path_opt.as_deref(),
-                                    ).await?
-                                } else {
-                                    router.execute_prompt(
-                                        task.task_type,
-                                        &system_prompt,
-                                        &user_prompt_run,
-                                    ).await?
-                                };
-                                Ok(out)
+                        // Retrieve specialized agent instance
+                        let mut agent = spawner_ref.spawn_agent_for_task(task.task_type);
+                        info!("Executing task '{}' via Agent '{}' ({})", task.id, agent.persona.name, agent.persona.title);
+
+                        // Search semantic memory for context
+                        let memory_context = memory_clone.query_semantic(&task.description, 3);
+                        let mut semantic_notes = String::new();
+                        if !memory_context.is_empty() {
+                            semantic_notes.push_str("\n--- Relevant Memory Context ---\n");
+                            for (text, score) in memory_context {
+                                semantic_notes.push_str(&format!("* {} (Similarity: {:.2})\n", text, score));
                             }
                         }
-                    ).await;
 
-                    match final_result {
-                        Ok(res) => {
-                            info!("Successfully completed task: '{}'", task.id);
-                            
-                            // Parse and apply autonomous Letta-style memory updates
-                            parse_and_apply_memory_updates(&res, &agent.persona.name, &mut agent.core_memory, &spawner_ref.memory_store);
+                        // Build user prompt
+                        let user_prompt = format!(
+                            "Goal: {}\nTask Title: {}\nDescription: {}\n{}\nInputs from Shared Memory:\n{:?}",
+                            goal, task.title, task.description, semantic_notes, shared_clone.list_keys()
+                        );
 
-                            if task.task_type == TaskType::Coding {
-                                let mut tr = ToolRouter::new();
-                                if let Ok(ast_report) = tr.execute_tool("ast_parse", &res) {
-                                    info!("AST analysis report:\n{}", ast_report);
+                        // Execute task with self-repair reflection loop
+                        let final_result = reflection_clone.run_self_repair_loop(
+                            &router_clone,
+                            &task.title,
+                            &task.description,
+                            "".to_string(), // starting empty to trigger model run inside loop
+                            |prev_output, feedback| {
+                                let router = router_clone.clone();
+                                let system_prompt = format!(
+                                    "{}\n\n=== LETTA-STYLE HIERARCHICAL CORE MEMORY ===\n{}\n\n=== MEMORY UPDATE PROTOCOL ===\nYou can autonomously update your core memory blocks. If you learn anything new about the user or your goals, or wish to refine your persona instructions, output your changes using this exact tag format:\n<update_core_memory block=\"human\">new info about the user</update_core_memory>\n<update_core_memory block=\"persona\">new self-instructions or skill notes</update_core_memory>\nDO NOT output placeholders. Write the full updated value.",
+                                    agent.persona.system_prompt,
+                                    agent.core_memory.to_xml()
+                                );
+                                let user_prompt_run = if prev_output.is_empty() {
+                                    user_prompt.clone()
+                                } else {
+                                    format!(
+                                        "{}\n\nPrevious attempt failed review.\nFeedback: {}\nPlease correct the output according to the feedback.",
+                                        user_prompt, feedback
+                                    )
+                                };
+
+                                let image_path_opt = image_path_opt.clone();
+                                async move {
+                                    let (out, _) = if task.task_type == TaskType::Vision {
+                                        router.execute_prompt_with_image(
+                                            task.task_type,
+                                            &system_prompt,
+                                            &user_prompt_run,
+                                            image_path_opt.as_deref(),
+                                        ).await?
+                                    } else {
+                                        router.execute_prompt(
+                                            task.task_type,
+                                            &system_prompt,
+                                            &user_prompt_run,
+                                        ).await?
+                                    };
+                                    Ok(out)
                                 }
                             }
+                        ).await;
 
-                            // Store in long-term and shared memory
-                            memory_clone.store_memory(&res, &format!("task-{}", task.id));
-                            shared_clone.publish(&task.id, &res);
+                        match final_result {
+                            Ok(res) => {
+                                info!("Successfully completed task: '{}'", task.id);
+                                
+                                // Parse and apply autonomous Letta-style memory updates
+                                parse_and_apply_memory_updates(&res, &agent.persona.name, &mut agent.core_memory, &spawner_ref.memory_store);
 
-                            // Update DAG status
-                            let mut dag_guard = dag_clone.lock().unwrap();
-                            dag_guard.update_status(&task.id, TaskStatus::Completed, Some(res));
+                                if task.task_type == TaskType::Coding {
+                                    let mut tr = ToolRouter::new();
+                                    if let Ok(ast_report) = tr.execute_tool("ast_parse", &res) {
+                                        info!("AST analysis report:\n{}", ast_report);
+                                    }
+                                }
+
+                                // Store in long-term and shared memory
+                                memory_clone.store_memory(&res, &format!("task-{}", task.id));
+                                shared_clone.publish(&task.id, &res);
+
+                                // Update DAG status
+                                let mut dag_guard = dag_clone.lock().unwrap();
+                                dag_guard.update_status(&task.id, TaskStatus::Completed, Some(res));
+                            }
+                            Err(e) => {
+                                error!("Task '{}' execution failed: {}", task.id, e);
+                                let mut dag_guard = dag_clone.lock().unwrap();
+                                dag_guard.update_status(&task.id, TaskStatus::Failed, None);
+                            }
                         }
-                        Err(e) => {
-                            error!("Task '{}' execution failed: {}", task.id, e);
-                            let mut dag_guard = dag_clone.lock().unwrap();
-                            dag_guard.update_status(&task.id, TaskStatus::Failed, None);
-                        }
-                    }
-                };
+                    };
 
-                task_futures.push(task_future);
+                    task_futures.push(task_future);
+                }
+
+                // Join all concurrent tasks in this chunk
+                join_all(task_futures).await;
             }
-
-            // Join all concurrent tasks
-            join_all(task_futures).await;
         }
 
         let dag_final = dag_mutex.lock().unwrap();
