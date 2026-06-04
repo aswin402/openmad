@@ -28,7 +28,28 @@ impl AgentRegistry {
             personas: HashMap::new(),
         };
         registry.register_defaults();
+        registry.load_custom_personas();
         registry
+    }
+
+    fn load_custom_personas(&mut self) {
+        use std::fs::File;
+        use std::io::Read;
+        use std::path::Path;
+
+        let path = Path::new("agents.json");
+        if path.exists() {
+            if let Ok(mut file) = File::open(path) {
+                let mut contents = String::new();
+                if file.read_to_string(&mut contents).is_ok() {
+                    if let Ok(custom) = serde_json::from_str::<HashMap<String, AgentPersona>>(&contents) {
+                        for (key, persona) in custom {
+                            self.personas.insert(key, persona);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn register(&mut self, key: &str, persona: AgentPersona) {
