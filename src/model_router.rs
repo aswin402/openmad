@@ -184,10 +184,15 @@ impl ModelRouter {
 
     /// Dispatches a prompt to the fallback chain.
     pub async fn execute_prompt(&self, task_type: TaskType, system_prompt: &str, user_prompt: &str) -> anyhow::Result<(String, String)> {
+        self.execute_prompt_with_image(task_type, system_prompt, user_prompt, None).await
+    }
+
+    /// Dispatches a prompt along with an optional local image path to the fallback chain.
+    pub async fn execute_prompt_with_image(&self, task_type: TaskType, system_prompt: &str, user_prompt: &str, image_path: Option<&str>) -> anyhow::Result<(String, String)> {
         let chain = self.get_chain_for_task(task_type);
 
         // Try primary model
-        match self.try_call(&chain.primary, system_prompt, user_prompt).await {
+        match self.try_call(&chain.primary, system_prompt, user_prompt, image_path).await {
             Ok(result) => {
                 self.record_performance(&chain.primary.name, true);
                 return Ok((result, chain.primary.name));
@@ -200,7 +205,7 @@ impl ModelRouter {
 
         // Try secondary model if configured
         if let Some(ref secondary) = chain.secondary {
-            match self.try_call(secondary, system_prompt, user_prompt).await {
+            match self.try_call(secondary, system_prompt, user_prompt, image_path).await {
                 Ok(result) => {
                     self.record_performance(&secondary.name, true);
                     return Ok((result, secondary.name.clone()));
@@ -214,7 +219,7 @@ impl ModelRouter {
 
         // Try ultimate fallback (often mock to guarantee execution)
         if let Some(ref fallback) = chain.fallback {
-            match self.try_call(fallback, system_prompt, user_prompt).await {
+            match self.try_call(fallback, system_prompt, user_prompt, image_path).await {
                 Ok(result) => {
                     self.record_performance(&fallback.name, true);
                     return Ok((result, fallback.name.clone()));
@@ -229,35 +234,57 @@ impl ModelRouter {
         Err(anyhow::anyhow!("All models in fallback chain failed for {:?}", task_type))
     }
 
-    async fn try_call(&self, config: &ModelConfig, system_prompt: &str, user_prompt: &str) -> anyhow::Result<String> {
+    async fn try_call(&self, config: &ModelConfig, system_prompt: &str, user_prompt: &str, image_path: Option<&str>) -> anyhow::Result<String> {
         if config.provider == "mock" {
-            return Ok(self.execute_mock(config, user_prompt));
+            return Ok(self.execute_mock(config, user_prompt, image_path));
         }
 
         // Check if API key exists in environment
         let api_key = std::env::var(&config.api_key_env).unwrap_or_default();
         if api_key.is_empty() {
             // No key? Silent degrade to mock instead of hard failing if executing in local shell testing
-            return Ok(self.execute_mock(config, user_prompt));
+            return Ok(self.execute_mock(config, user_prompt, image_path));
         }
 
         match config.provider.as_str() {
-            "gemini" => self.call_gemini(config, &api_key, system_prompt, user_prompt).await,
+            "gemini" => self.call_gemini(config, &api_key, system_prompt, user_prompt, image_path).await,
             "anthropic" => self.call_anthropic(config, &api_key, system_prompt, user_prompt).await,
-            "openai" => self.call_openai(config, &api_key, system_prompt, user_prompt).await,
+            "openai" => self.call_openai(config, &api_key, system_prompt, user_prompt, image_path).await,
             _ => Err(anyhow::anyhow!("Unsupported provider: {}", config.provider)),
         }
     }
 
-    async fn call_gemini(&self, config: &ModelConfig, api_key: &str, system: &str, user: &str) -> anyhow::Result<String> {
+    async fn call_gemini(&self, config: &ModelConfig, api_key: &str, system: &str, user: &str, image_path: Option<&str>) -> anyhow::Result<String> {
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
             config.name, api_key
         );
 
+        let mut parts = vec![
+            serde_json::json!({"text": format!("System instructions: {}\n\nUser request: {}", system, user)})
+        ];
+
+        if let Some(path) = image_path {
+            if let Ok(bytes) = std::fs::read(path) {
+                let base64_data = base64_encode(&bytes);
+                let mime_type = if path.ends_with(".png") {
+                    "image/png"
+                } else {
+                    "image/jpeg"
+                };
+                parts.push(serde_json::json!({
+                    "inlineData": {
+                        "mimeType": mime_type,
+                        "data": base64_data
+                    }
+                }));
+                info!("Gemini API: Attached image '{}' to payload", path);
+            }
+        }
+
         let body = serde_json::json!({
             "contents": [{
-                "parts": [{"text": format!("System instructions: {}\n\nUser request: {}", system, user)}]
+                "parts": parts
             }],
             "generationConfig": {
                 "temperature": 0.2
@@ -315,14 +342,36 @@ impl ModelRouter {
         Ok(text.to_string())
     }
 
-    async fn call_openai(&self, config: &ModelConfig, api_key: &str, system: &str, user: &str) -> anyhow::Result<String> {
+    async fn call_openai(&self, config: &ModelConfig, api_key: &str, system: &str, user: &str, image_path: Option<&str>) -> anyhow::Result<String> {
         let url = "https://api.openai.com/v1/chat/completions";
+
+        let mut content_parts = vec![
+            serde_json::json!({"type": "text", "text": user})
+        ];
+
+        if let Some(path) = image_path {
+            if let Ok(bytes) = std::fs::read(path) {
+                let base64_data = base64_encode(&bytes);
+                let mime_type = if path.ends_with(".png") {
+                    "image/png"
+                } else {
+                    "image/jpeg"
+                };
+                content_parts.push(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": format!("data:{};base64,{}", mime_type, base64_data)
+                    }
+                }));
+                info!("OpenAI API: Attached image '{}' to payload", path);
+            }
+        }
 
         let body = serde_json::json!({
             "model": config.name,
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user}
+                {"role": "user", "content": content_parts}
             ],
             "temperature": 0.2
         });
@@ -346,12 +395,55 @@ impl ModelRouter {
         Ok(text.to_string())
     }
 
-    fn execute_mock(&self, config: &ModelConfig, user_prompt: &str) -> String {
+    fn execute_mock(&self, config: &ModelConfig, user_prompt: &str, image_path: Option<&str>) -> String {
         info!("Executing mock model '{}' (offline/fallback mode)", config.name);
         
+        if let Some(path) = image_path {
+            return format!("MOCK VISION ANALYSIS OF IMAGE '{}': The image contains a user-provided wireframe mock. The design has a top header bar with menu items, a left sidebar, and a central list showing task items. Spacing looks aligned on a standard 8px grid.", path);
+        }
+
         let p_lower = user_prompt.to_lowercase();
         if p_lower.contains("plan") || p_lower.contains("dag") {
-            r#"[
+            if p_lower.contains(".png") || p_lower.contains(".jpg") || p_lower.contains(".jpeg") {
+                r#"[
+  {
+    "id": "T1",
+    "title": "Analyze input image mockup",
+    "description": "Analyze structural spacing and details of the provided visual interface mockup.",
+    "type": "Vision",
+    "dependencies": []
+  },
+  {
+    "id": "T2",
+    "title": "Decompose design specifications",
+    "description": "Formulate spec details based on the visual mockup analysis.",
+    "type": "Planning",
+    "dependencies": ["T1"]
+  },
+  {
+    "id": "T3",
+    "title": "Implement core code modules",
+    "description": "Write clean Rust implementations representing the visual design components.",
+    "type": "Coding",
+    "dependencies": ["T2"]
+  },
+  {
+    "id": "T4",
+    "title": "Review structural modules",
+    "description": "Conduct a strict peer review of safety traits and design patterns.",
+    "type": "Review",
+    "dependencies": ["T3"]
+  },
+  {
+    "id": "T5",
+    "title": "Run automated test suites",
+    "description": "Implement and execute integration tests to verify correctness.",
+    "type": "Testing",
+    "dependencies": ["T4"]
+  }
+]"#.to_string()
+            } else {
+                r#"[
   {
     "id": "T1",
     "title": "Analyze architecture design",
@@ -388,6 +480,7 @@ impl ModelRouter {
     "dependencies": ["T4"]
   }
 ]"#.to_string()
+            }
         } else if p_lower.contains("research") {
             "RESEARCH REPORT: Found 3 relevant library integrations. Recommend using hyper/rustls for networking, petgraph for dependency graph sorting, and tree-sitter-rust for source code traversal. Embedding searches show these are optimal for Rust-based orchestration.\n\n<update_core_memory block=\"human\">Alex wants to build high-performance agent tools in Rust, preferring Tokio for async operations and fastembed for embeddings.</update_core_memory>\n<update_core_memory block=\"persona\">I am Mary, a Business Analyst. I now remember that Alex is building high-performance systems and likes Tokio.</update_core_memory>".to_string()
         } else if p_lower.contains("code") || p_lower.contains("implement") {
@@ -402,4 +495,25 @@ impl ModelRouter {
             format!("MOCK RESPONSE (Model: {}): Processed prompt successfully. Results generated in local workspace context.", config.name)
         }
     }
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut i = 0;
+    while i < data.len() {
+        let b0 = data[i] as usize;
+        let b1 = if i + 1 < data.len() { data[i + 1] as usize } else { 0 };
+        let b2 = if i + 2 < data.len() { data[i + 2] as usize } else { 0 };
+
+        let n = (b0 << 16) | (b1 << 8) | b2;
+
+        result.push(CHARSET[(n >> 18) & 63] as char);
+        result.push(CHARSET[(n >> 12) & 63] as char);
+        result.push(if i + 1 < data.len() { CHARSET[(n >> 6) & 63] as char } else { '=' });
+        result.push(if i + 2 < data.len() { CHARSET[n & 63] as char } else { '=' });
+
+        i += 3;
+    }
+    result
 }

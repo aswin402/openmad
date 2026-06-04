@@ -31,6 +31,12 @@ impl Orchestrator {
     pub async fn run_goal(&self, goal: &str) -> anyhow::Result<()> {
         info!("=== STARTING ORCHESTRATION FOR GOAL: '{}' ===", goal);
 
+        // Extract any user provided local image paths from the goal
+        let detected_image = extract_image_path(goal);
+        if let Some(ref path) = detected_image {
+            info!("Detected input image mock file: '{}'", path);
+        }
+
         // 1. Spawning dynamic agent team based on complexity
         let team = self.spawner.spawn_team_for_goal(goal);
         info!("Spawned dynamic agent team of size: {}", team.len());
@@ -49,7 +55,15 @@ impl Orchestrator {
             planner_agent.persona.system_prompt
         );
 
-        let user_prompt = format!("Goal to decompose: '{}'", goal);
+        let user_prompt = if let Some(ref path) = detected_image {
+            format!(
+                "Goal to decompose: '{}'\nNote: An input image path was detected: '{}'. You should include a Vision analysis task at the beginning of your plan to analyze this image first.",
+                goal, path
+            )
+        } else {
+            format!("Goal to decompose: '{}'", goal)
+        };
+
         let (plan_output, model_used) = self.model_router.execute_prompt(
             TaskType::Planning,
             &system_prompt,
@@ -91,15 +105,22 @@ impl Orchestrator {
         // Safe fallback if parsing fails
         if dag.tasks.is_empty() {
             warn!("JSON parsing failed or empty. Applying fallback standard DAG.");
-            dag.add_task("T1".to_string(), "Analyze design".to_string(), "Assess design requirements.".to_string(), TaskType::Planning, vec![]);
-            dag.add_task("T2".to_string(), "Implement framework".to_string(), "Write core codes.".to_string(), TaskType::Coding, vec!["T1".to_string()]);
-            
-            let goal_lower = goal.to_lowercase();
-            if goal_lower.contains("ui") || goal_lower.contains("design") || goal_lower.contains("css") || goal_lower.contains("visual") || goal_lower.contains("vision") {
-                dag.add_task("T3".to_string(), "Visual audit interface".to_string(), "Perform UI styling verification, grid spacing check, and design fidelity audit.".to_string(), TaskType::Vision, vec!["T2".to_string()]);
-                dag.add_task("T4".to_string(), "Run verifications".to_string(), "Perform testing checks on backend and visual elements.".to_string(), TaskType::Testing, vec!["T3".to_string()]);
+            if let Some(ref path) = detected_image {
+                dag.add_task("T1".to_string(), "Analyze input image".to_string(), format!("Use Vision agent to analyze structure and details of the input image mock at '{}'.", path), TaskType::Vision, vec![]);
+                dag.add_task("T2".to_string(), "Decompose design specifications".to_string(), "Analyze design requirements based on the visual report.".to_string(), TaskType::Planning, vec!["T1".to_string()]);
+                dag.add_task("T3".to_string(), "Implement code modules".to_string(), "Write core codes based on the specifications.".to_string(), TaskType::Coding, vec!["T2".to_string()]);
+                dag.add_task("T4".to_string(), "Run verifications".to_string(), "Perform testing checks.".to_string(), TaskType::Testing, vec!["T3".to_string()]);
             } else {
-                dag.add_task("T3".to_string(), "Run verifications".to_string(), "Perform testing checks.".to_string(), TaskType::Testing, vec!["T2".to_string()]);
+                dag.add_task("T1".to_string(), "Analyze design".to_string(), "Assess design requirements.".to_string(), TaskType::Planning, vec![]);
+                dag.add_task("T2".to_string(), "Implement framework".to_string(), "Write core codes.".to_string(), TaskType::Coding, vec!["T1".to_string()]);
+                
+                let goal_lower = goal.to_lowercase();
+                if goal_lower.contains("ui") || goal_lower.contains("design") || goal_lower.contains("css") || goal_lower.contains("visual") || goal_lower.contains("vision") {
+                    dag.add_task("T3".to_string(), "Visual audit interface".to_string(), "Perform UI styling verification, grid spacing check, and design fidelity audit.".to_string(), TaskType::Vision, vec!["T2".to_string()]);
+                    dag.add_task("T4".to_string(), "Run verifications".to_string(), "Perform testing checks on backend and visual elements.".to_string(), TaskType::Testing, vec!["T3".to_string()]);
+                } else {
+                    dag.add_task("T3".to_string(), "Run verifications".to_string(), "Perform testing checks.".to_string(), TaskType::Testing, vec!["T2".to_string()]);
+                }
             }
         }
 
@@ -140,6 +161,7 @@ impl Orchestrator {
                 let memory_clone = self.memory_engine.clone();
                 let shared_clone = self.shared_memory.clone();
                 let reflection_clone = self.reflection_system.clone();
+                let image_path_opt = detected_image.clone();
 
                 let task_future = async move {
                     let task = {
@@ -189,12 +211,22 @@ impl Orchestrator {
                                 )
                             };
 
+                            let image_path_opt = image_path_opt.clone();
                             async move {
-                                let (out, _) = router.execute_prompt(
-                                    task.task_type,
-                                    &system_prompt,
-                                    &user_prompt_run,
-                                ).await?;
+                                let (out, _) = if task.task_type == TaskType::Vision {
+                                    router.execute_prompt_with_image(
+                                        task.task_type,
+                                        &system_prompt,
+                                        &user_prompt_run,
+                                        image_path_opt.as_deref(),
+                                    ).await?
+                                } else {
+                                    router.execute_prompt(
+                                        task.task_type,
+                                        &system_prompt,
+                                        &user_prompt_run,
+                                    ).await?
+                                };
                                 Ok(out)
                             }
                         }
@@ -294,4 +326,16 @@ fn parse_and_apply_memory_updates(
         }
         current_pos += start_tag_prefix.len();
     }
+}
+
+fn extract_image_path(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let word_clean = word.trim().trim_matches('"').trim_matches('\'');
+        if word_clean.ends_with(".png") || word_clean.ends_with(".jpg") || word_clean.ends_with(".jpeg") {
+            if std::path::Path::new(word_clean).exists() {
+                return Some(word_clean.to_string());
+            }
+        }
+    }
+    None
 }
