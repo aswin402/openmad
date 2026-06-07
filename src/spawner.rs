@@ -37,9 +37,9 @@ impl AgentSpawner {
         let mut team = Vec::new();
 
         // Dynamically analyze complexity to build the team
-        if goal_lower.contains("website") || goal_lower.contains("saas") || goal_lower.contains("app") {
-            info!("Goal complexity evaluated as HIGH. Spawning full development team.");
-            // Spawn PM (John), BA (Mary), UX (Sally), Architect (Winston), Developer (Amelia), and Tester
+        if goal_lower.contains("website") || goal_lower.contains("saas") || goal_lower.contains("app") || goal_lower.contains("deploy") || goal_lower.contains("ship") {
+            info!("Goal complexity evaluated as HIGH/Deployment. Spawning full development team with Deployer.");
+            // Spawn PM (John), BA (Mary), UX (Sally), Architect (Winston), Developer (Amelia), Tester, Writer, Vision, and Deployer
             if let Some(john) = self.registry.get("john") {
                 team.push(self.create_instance("john-id", john, TaskType::Planning));
             }
@@ -60,6 +60,9 @@ impl AgentSpawner {
             }
             if let Some(vivian) = self.registry.get("vivian") {
                 team.push(self.create_instance("vivian-id", vivian, TaskType::Vision));
+            }
+            if let Some(deployer) = self.registry.get("deployer") {
+                team.push(self.create_instance("deployer-id", deployer, TaskType::Deploy));
             }
         } else if goal_lower.contains("ui") || goal_lower.contains("design") || goal_lower.contains("css") || goal_lower.contains("frontend") || goal_lower.contains("visual") || goal_lower.contains("vision") {
             info!("Goal contains visual UI/design requests. Spawning Vision Auditor team.");
@@ -102,6 +105,7 @@ impl AgentSpawner {
             TaskType::Testing => "tester",
             TaskType::Documentation => "writer",
             TaskType::Vision => "vision",
+            TaskType::Deploy => "deployer",
         }, Uuid::new_v4().to_string().split_at(8).0);
 
         let key = match task_type {
@@ -112,6 +116,7 @@ impl AgentSpawner {
             TaskType::Testing => "tester",
             TaskType::Documentation => "paige",
             TaskType::Vision => "vivian",
+            TaskType::Deploy => "deployer",
         };
 
         let persona = self.registry.get(key).cloned().unwrap_or_else(|| AgentPersona {

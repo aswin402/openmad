@@ -10,6 +10,7 @@ pub enum TaskType {
     Testing,
     Documentation,
     Vision,
+    Deploy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

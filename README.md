@@ -1,7 +1,7 @@
 # OpenMAD: Advanced Autonomous Multi-Agent Orchestrator
 
 <p align="center">
-  <img src="openmad_logo.png" alt="OpenMAD Logo" width="400" />
+  <img src="openmad_logo.svg" alt="OpenMAD Logo" width="600" />
 </p>
 
 OpenMAD (**Open M**ulti-**A**gent **D**eveloper) is a high-performance, active multi-agent orchestrator runtime written in Rust. It is inspired by the agile software delivery phases of the [BMad Method](https://github.com/bmad-code-org/bmad-method) (Business Analyst, PM, Architect, Developer, QA, Writer), but evolves the methodology from a static prompt-based system into a fully automated, concurrent, and self-repairing agentic pipeline.
@@ -10,7 +10,7 @@ OpenMAD (**Open M**ulti-**A**gent **D**eveloper) is a high-performance, active m
 
 ## 🚀 Key Features
 
-*   **Dynamic Agent Spawning**: Analyzes the complexity of user goals and recruits only the specialized agents needed (Mary/BA, John/PM, Winston/Architect, Amelia/Developer, Vivian/Vision Auditor, TestBot/QA) to perform the task, teardown agents after goal accomplishment.
+*   **Dynamic Agent Spawning**: Analyzes the complexity of user goals and recruits only the specialized agents needed (Mary/BA, John/PM, Winston/Architect, Amelia/Developer, Vivian/Vision Auditor, TestBot/QA, DepBot/Deployer) to perform the task, teardown agents after goal accomplishment.
 *   **Parallel Task Execution (DAG)**: Decomposes objectives into a Directed Acyclic Graph of tasks and runs non-dependent tasks concurrently using Tokio task joins.
 *   **Multimodal Vision Integration**: Integrates a Vision Auditor Agent (Vivian) to view images, analyze grid spacing, verify layouts, and audit visual diagrams using multimodal LLMs (e.g. Gemini 2.5 Flash).
 *   **Multi-Model Router & Fallbacks**: Routes task types to specialized LLMs (Qwen/DeepSeek for coding, Claude/Gemini for research) and handles fail-safe execution using fallback chains (Primary $\rightarrow$ Secondary $\rightarrow$ Fallback).
@@ -47,8 +47,8 @@ OpenMAD is written in pure Rust, ensuring exceptionally lightweight footprints c
 | :--- | :--- | :--- |
 | **System Model** | Static prompts/instructions for human-in-the-loop IDE agents | Autonomous orchestration runtime with active agent event loops |
 | **Target Directory** | Nested `.claude/` or `.cursor/` folders | Directly under project root `openmad/` |
-| **Concurrency** | Sequential chat execution | Concurrent parallel execution of independent tasks via Tokio |
-| **Agent Roster** | Hardcoded configs (`mary`, `john`, `amelia`) | Dynamic agent spawner based on goal complexity |
+| **Concurrency** | Sequential chat execution | Concurrent parallel execution of independent tasks via Tokio (up to 2 parallel agents at a time) |
+| **Agent Roster** | Hardcoded configs (`mary`, `john`, `amelia`) | Dynamic agent spawner (including Coder, Vision, QA, and Deployer) |
 | **LLM Router** | Static model selection per IDE | Dynamic model routing based on past success rates |
 | **Errors / Failures** | Execution halt / user intervention | Multi-model fallback chains (Gemini $\rightarrow$ Claude $\rightarrow$ OpenAI) |
 | **Memory** | Global context markdown files | Stateful, hierarchical Letta-style memory (Core, Recall, Archival) with local fastembed vector storage |

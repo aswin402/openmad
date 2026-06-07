@@ -34,7 +34,7 @@ An implementation of a Directed Acyclic Graph (DAG) for agent workflows. It tran
 
 ### 3. Agent Spawner & Registry (`spawner.rs`, `agent.rs`)
 Responsible for managing agent identities.
-- `agent.rs` defines `AgentPersona` (voice, titles, principles, system prompts) and registers defaults (John/PM, Mary/BA, Winston/Architect, Amelia/Coder, TestBot/Tester, Paige/Writer, Vivian/Vision).
+- `agent.rs` defines `AgentPersona` (voice, titles, principles, system prompts) and registers defaults (John/PM, Mary/BA, Winston/Architect, Amelia/Coder, TestBot/Tester, Paige/Writer, Vivian/Vision, DepBot/Deployer).
 - `spawner.rs` acts as a dynamic factory, assessing task scope to allocate channel-wrapped agent instances and garbage collecting them once tasks complete.
 
 ### 4. Model Router & Fallbacks (`model_router.rs`)

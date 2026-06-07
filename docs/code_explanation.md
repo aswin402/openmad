@@ -31,7 +31,7 @@ Implements the workflow dependency graph.
 ### 4. `agent.rs`
 Defines agent personas.
 - **`AgentPersona`**: Struct detailing the name, title, principles, and system instructions of an agent.
-- **`AgentRegistry`**: Thread-safe registry containing defaults for PM (John), BA (Mary), Architect (Winston), Developer (Amelia), Vision (Vivian), QA (TestBot), and Writer (Paige).
+- **`AgentRegistry`**: Thread-safe registry containing defaults for PM (John), BA (Mary), Architect (Winston), Developer (Amelia), Vision (Vivian), QA (TestBot), Writer (Paige), and Deployer (DepBot).
 
 ### 5. `spawner.rs`
 Dynamically recruits and coordinates communication channels for agents.

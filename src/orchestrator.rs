@@ -88,6 +88,7 @@ impl Orchestrator {
                         "Review" => TaskType::Review,
                         "Testing" => TaskType::Testing,
                         "Vision" => TaskType::Vision,
+                        "Deploy" => TaskType::Deploy,
                         _ => TaskType::Documentation,
                     };
                     let deps: Vec<String> = t_val["dependencies"]
@@ -105,21 +106,31 @@ impl Orchestrator {
         // Safe fallback if parsing fails
         if dag.tasks.is_empty() {
             warn!("JSON parsing failed or empty. Applying fallback standard DAG.");
+            let goal_lower = goal.to_lowercase();
+            let needs_deploy = goal_lower.contains("deploy") || goal_lower.contains("release") || goal_lower.contains("ship");
             if let Some(ref path) = detected_image {
                 dag.add_task("T1".to_string(), "Analyze input image".to_string(), format!("Use Vision agent to analyze structure and details of the input image mock at '{}'.", path), TaskType::Vision, vec![]);
                 dag.add_task("T2".to_string(), "Decompose design specifications".to_string(), "Analyze design requirements based on the visual report.".to_string(), TaskType::Planning, vec!["T1".to_string()]);
                 dag.add_task("T3".to_string(), "Implement code modules".to_string(), "Write core codes based on the specifications.".to_string(), TaskType::Coding, vec!["T2".to_string()]);
                 dag.add_task("T4".to_string(), "Run verifications".to_string(), "Perform testing checks.".to_string(), TaskType::Testing, vec!["T3".to_string()]);
+                if needs_deploy {
+                    dag.add_task("T5".to_string(), "Deploy application".to_string(), "Deploy the application and verify final build.".to_string(), TaskType::Deploy, vec!["T4".to_string()]);
+                }
             } else {
                 dag.add_task("T1".to_string(), "Analyze design".to_string(), "Assess design requirements.".to_string(), TaskType::Planning, vec![]);
                 dag.add_task("T2".to_string(), "Implement framework".to_string(), "Write core codes.".to_string(), TaskType::Coding, vec!["T1".to_string()]);
                 
-                let goal_lower = goal.to_lowercase();
-                if goal_lower.contains("ui") || goal_lower.contains("design") || goal_lower.contains("css") || goal_lower.contains("visual") || goal_lower.contains("vision") {
+                let last_task_id = if goal_lower.contains("ui") || goal_lower.contains("design") || goal_lower.contains("css") || goal_lower.contains("visual") || goal_lower.contains("vision") {
                     dag.add_task("T3".to_string(), "Visual audit interface".to_string(), "Perform UI styling verification, grid spacing check, and design fidelity audit.".to_string(), TaskType::Vision, vec!["T2".to_string()]);
                     dag.add_task("T4".to_string(), "Run verifications".to_string(), "Perform testing checks on backend and visual elements.".to_string(), TaskType::Testing, vec!["T3".to_string()]);
+                    "T4".to_string()
                 } else {
                     dag.add_task("T3".to_string(), "Run verifications".to_string(), "Perform testing checks.".to_string(), TaskType::Testing, vec!["T2".to_string()]);
+                    "T3".to_string()
+                };
+
+                if needs_deploy {
+                    dag.add_task("T_deploy".to_string(), "Deploy application".to_string(), "Deploy the application and verify final build.".to_string(), TaskType::Deploy, vec![last_task_id]);
                 }
             }
         }

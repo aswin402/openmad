@@ -8,7 +8,7 @@ This document details the core features and advanced capabilities of the **OpenM
 
 Instead of maintaining a fixed roster of active threads, OpenMAD dynamically spins agents up and down based on task requirements:
 *   **Goal Complexity Parsing**: Evaluates user inputs for complexity (e.g. standard fixes vs complex applications).
-*   **Target Recruitment**: Allocates unique channel IDs and spawns specific personas (PM, Coder, Vision Auditor, Tester) onto the Tokio runtime.
+*   **Target Recruitment**: Allocates unique channel IDs and spawns specific personas (PM, Coder, Vision Auditor, Tester, Deployer) onto the Tokio runtime.
 *   **Resource Reclamation**: Destroys the agent instances and shuts down their respective message channels upon goal completion to minimize memory footprints.
 
 ---

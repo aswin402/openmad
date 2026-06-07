@@ -166,6 +166,23 @@ impl ModelRouter {
                     api_key_env: "".to_string(),
                 }),
             },
+            TaskType::Deploy => FallbackChain {
+                primary: ModelConfig {
+                    name: "gemini-2.5-flash".to_string(),
+                    provider: "gemini".to_string(),
+                    api_key_env: "GEMINI_API_KEY".to_string(),
+                },
+                secondary: Some(ModelConfig {
+                    name: "gpt-4o".to_string(),
+                    provider: "openai".to_string(),
+                    api_key_env: "OPENAI_API_KEY".to_string(),
+                }),
+                fallback: Some(ModelConfig {
+                    name: "mock-deployer".to_string(),
+                    provider: "mock".to_string(),
+                    api_key_env: "".to_string(),
+                }),
+            },
         }
     }
 
